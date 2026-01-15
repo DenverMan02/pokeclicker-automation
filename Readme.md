@@ -7,6 +7,6 @@ It will never perform actions that the game would not allow.
 
 Last known compatible pokeclicker version: 0.10.25
 
-For more details, please refer to the [wiki](../../wiki)
+For more details, please refer to the [wiki](https://github.com/Farigh/pokeclicker-automation/wiki)
 
 For Pokeclicker Desktop app support, refer to [this repository](https://github.com/Farigh/pokeclicker-automation-desktop/releases)
