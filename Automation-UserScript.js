@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker Automation (Denver)
 // @namespace    https://github.com/DenverMan02/pokeclicker-automation/
-// @version      0.1.0
+// @version      0.1.1
 // @description  Automation for pokeclicker.com, based on Aleqsd's fork
 // @author       GARCIN David
 // @match        https://www.pokeclicker.com
