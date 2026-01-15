@@ -91,9 +91,27 @@ class AutomationShop
         titleDiv.style.marginBottom = "10px";
         shoppingSettingPanel.appendChild(titleDiv);
 
-        let isAnyItemHidden = this.__internal__buildShopItemListMenu(shoppingSettingPanel, "Pokédollars", GameConstants.Currency.money);
-        isAnyItemHidden |= this.__internal__buildShopItemListMenu(shoppingSettingPanel, "Eggs", GameConstants.Currency.questPoint);
-        isAnyItemHidden |= this.__internal__buildShopItemListMenu(shoppingSettingPanel, "Farm tools", GameConstants.Currency.farmPoint);
+        // Build tabs with specific item type filters
+        let isAnyItemHidden = this.__internal__buildShopItemListMenu(
+            shoppingSettingPanel,
+            "Pokédollars",
+            (data) => data.item.currency === GameConstants.Currency.money
+        );
+        isAnyItemHidden |= this.__internal__buildShopItemListMenu(
+            shoppingSettingPanel,
+            "Evo Stones",
+            (data) => Automation.Utils.isInstanceOf(data.item, "EvolutionStone")
+        );
+        isAnyItemHidden |= this.__internal__buildShopItemListMenu(
+            shoppingSettingPanel,
+            "Eggs",
+            (data) => Automation.Utils.isInstanceOf(data.item, "EggItem")
+        );
+        isAnyItemHidden |= this.__internal__buildShopItemListMenu(
+            shoppingSettingPanel,
+            "Farm tools",
+            (data) => data.item.currency === GameConstants.Currency.farmPoint
+        );
 
         // Set an unlock watcher if needed
         if (isAnyItemHidden)
@@ -185,17 +203,23 @@ class AutomationShop
      *
      * @param {Element} parentDiv: The div to add the list to
      * @param {string} tabName: The tab label name
-     * @param currency: The pokéclicker currency associated with the tab
+     * @param {Function} filterFunc: Function that returns true if the item should be included in this tab
      *
      * @returns True if the item is hidden, false otherwise
      */
-    static __internal__buildShopItemListMenu(parentDiv, tabName, currency)
+    static __internal__buildShopItemListMenu(parentDiv, tabName, filterFunc)
     {
         this.__internal__shopListCount += 1;
 
         // Add the tab
         const shopSettingsTabsGroup = "automationShopSettings";
         const tabContainer = Automation.Menu.addTabElement(parentDiv, tabName, shopSettingsTabsGroup);
+
+        // Filter items for this tab
+        const filteredItems = this.__internal__shopItems.filter(filterFunc);
+
+        // Get the currency from the first item (all items in a tab should have the same currency)
+        const currency = filteredItems.length > 0 ? filteredItems[0].item.currency : GameConstants.Currency.money;
 
         // Add the min currency limit input
         const minCurrencyInputContainer = document.createElement("div");
@@ -250,7 +274,7 @@ class AutomationShop
         let isAnyItemHidden = false;
         let isAnyItemVisible = false;
 
-        for (const itemData of this.__internal__shopItems.filter(data => data.item.currency === currency))
+        for (const itemData of filteredItems)
         {
             const isItemHidden = this.__internal__addItemToTheList(table, itemData);
             isAnyItemHidden |= isItemHidden;
@@ -513,6 +537,7 @@ class AutomationShop
                     //   - Energy restore
                     //   - Pokeballs (all types)
                     //   - Vitamins
+                    //   - Evolution Stones
                     //
                     // Eggs
                     //   - Eggs
@@ -525,6 +550,7 @@ class AutomationShop
                           || Automation.Utils.isInstanceOf(item, "EnergyRestore")
                           || Automation.Utils.isInstanceOf(item, "PokeballItem")
                           || Automation.Utils.isInstanceOf(item, "Vitamin")
+                          || Automation.Utils.isInstanceOf(item, "EvolutionStone")
 
                           || Automation.Utils.isInstanceOf(item, "EggItem")
 
@@ -684,7 +710,25 @@ class AutomationShop
             Automation.Utils.LocalStorage.setDefaultValue(
                 this.__internal__advancedSettings.MaxBuyUnitPrice(itemData.item.name), itemData.item.basePrice);
 
-            if (itemData.item.currency == GameConstants.Currency.money)
+            // Evolution stones: Buy 1 at a time and keep 1 in stock
+            if (Automation.Utils.isInstanceOf(itemData.item, "EvolutionStone"))
+            {
+                // Buy 1 item at a time
+                Automation.Utils.LocalStorage.setDefaultValue(this.__internal__advancedSettings.BuyAmount(itemData.item.name), 1);
+
+                // Keep 1 in stock
+                Automation.Utils.LocalStorage.setDefaultValue(this.__internal__advancedSettings.TargetAmount(itemData.item.name), 1);
+            }
+            // Egg items: Buy 1 at a time and keep 1 in stock
+            else if (Automation.Utils.isInstanceOf(itemData.item, "EggItem"))
+            {
+                // Buy 1 item at a time
+                Automation.Utils.LocalStorage.setDefaultValue(this.__internal__advancedSettings.BuyAmount(itemData.item.name), 1);
+
+                // Keep 1 in stock
+                Automation.Utils.LocalStorage.setDefaultValue(this.__internal__advancedSettings.TargetAmount(itemData.item.name), 1);
+            }
+            else if (itemData.item.currency == GameConstants.Currency.money)
             {
                 // By 10 items at a time by default
                 Automation.Utils.LocalStorage.setDefaultValue(this.__internal__advancedSettings.BuyAmount(itemData.item.name), 10);
@@ -736,6 +780,24 @@ class AutomationShop
                 continue;
             }
             itemData.htmlElems.warning.hidden = true;
+
+            // For evolution stones, only buy if there are possible evolutions
+            if (Automation.Utils.isInstanceOf(itemData.item, "EvolutionStone"))
+            {
+                if (!this.__internal__hasPossibleEvolutions(itemData.item.name))
+                {
+                    continue;
+                }
+            }
+
+            // For egg items, only buy if there are uncaught pokemon in the egg
+            if (Automation.Utils.isInstanceOf(itemData.item, "EggItem"))
+            {
+                if (!this.__internal__hasUncaughtPokemonInEgg(itemData.item.name))
+                {
+                    continue;
+                }
+            }
 
             const targetAmount = parseInt(Automation.Utils.LocalStorage.getValue(this.__internal__advancedSettings.TargetAmount(itemData.item.name)));
 
@@ -833,6 +895,101 @@ class AutomationShop
         }
 
         return player.itemList[item.name]();
+    }
+
+    /**
+     * @brief Checks if there are any uncaught pokemon in the given egg item
+     *
+     * @param {string} eggItemName: The name of the egg item (e.g., "Fire_egg")
+     *
+     * @returns True if there are uncaught pokemon in this egg, false otherwise
+     */
+    static __internal__hasUncaughtPokemonInEgg(eggItemName)
+    {
+        // Check if breeding and hatchList exist
+        if (!App.game.breeding || !App.game.breeding.hatchList)
+        {
+            return false;
+        }
+
+        // Get the egg type from the item name
+        const eggType = GameConstants.EggItemType[eggItemName];
+        if (eggType === undefined)
+        {
+            return false;
+        }
+
+        // Get the hatch list for this egg type
+        const hatchList = App.game.breeding.hatchList[eggType];
+        if (!hatchList)
+        {
+            return false;
+        }
+
+        // Get pokemon available up to the player's highest region
+        const highestRegion = player.highestRegion ? player.highestRegion() : 0;
+        const hatchable = hatchList.slice(0, highestRegion + 1).flat();
+
+        // Check if any pokemon is not caught yet
+        for (const pokemonName of hatchable)
+        {
+            const caughtStatus = PartyController.getCaughtStatusByName(pokemonName);
+            // CaughtStatus.NotCaught = 0, so if any is 0, we have uncaught pokemon
+            if (caughtStatus === 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @brief Checks if there are any possible evolutions for the given evolution stone
+     *
+     * @param {string} stoneName: The name of the evolution stone
+     *
+     * @returns True if there are pokemon that can be evolved with this stone, false otherwise
+     */
+    static __internal__hasPossibleEvolutions(stoneName)
+    {
+        // Check if pokemonMap exists (it contains all pokemon data)
+        if (!App.game.party || !App.game.party.caughtPokemon || !pokemonMap)
+        {
+            return false;
+        }
+
+        // Get the stone type from the item name
+        const stoneType = GameConstants.StoneType[stoneName];
+        if (stoneType === undefined)
+        {
+            return false;
+        }
+
+        // Go through all caught pokemon
+        for (const caughtPokemon of App.game.party.caughtPokemon)
+        {
+            const pokemonId = caughtPokemon.id;
+            const pokemonData = pokemonMap[pokemonId];
+
+            if (!pokemonData || !pokemonData.evolutions)
+            {
+                continue;
+            }
+
+            // Check if any evolution uses this stone
+            for (const evolution of pokemonData.evolutions)
+            {
+                // Check if this evolution requires the stone we're checking
+                if (evolution.stone === stoneType ||
+                    (evolution.restrictions && evolution.restrictions.some(r => r.type === stoneType)))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
