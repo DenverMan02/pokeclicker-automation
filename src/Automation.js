@@ -18,6 +18,7 @@ class Automation
     static Notifications = AutomationNotifications;
     static Purify = AutomationPurify;
     static Menu = AutomationMenu;
+    static PassiveQuests = AutomationPassiveQuests;
     static Shop = AutomationShop;
     static BattleItems = AutomationBattleItems;
     static Trivia = AutomationTrivia;
@@ -68,6 +69,7 @@ class Automation
                     // 'Automation' panel
                     this.Click.initialize(initStep);
                     this.Focus.initialize(initStep);
+                    this.PassiveQuests.initialize(initStep);
                     this.Hatchery.initialize(initStep);
                     this.Purify.initialize(initStep);
                     this.Underground.initialize(initStep);
